@@ -123,6 +123,7 @@
       pageIndicator: $('page-indicator'), pageIndicatorGroup: $('page-indicator-group'),
       thumbStrip: $('page-thumb-strip'),
       fullscreenBtn: $('btn-fullscreen'),
+      exitFullscreenBtn: $('btn-exit-fullscreen'),
     });
 
     const toolbar = new WM.Toolbar(state, canvasEditor, {
@@ -207,7 +208,10 @@
     })(toolbar.addLayer);
 
     document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') { closeModal(); closePanels(); }
+      if (e.key === 'Escape') {
+        closeModal(); closePanels();
+        if (pageNav.isFullscreen()) pageNav.toggleFullscreen(false);
+      }
     });
 
     window.WM_APP = { state, canvasEditor, panels, pageNav, toolbar };

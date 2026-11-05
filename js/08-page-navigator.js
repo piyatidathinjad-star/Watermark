@@ -20,6 +20,7 @@
     els.prevPage.addEventListener('click', () => this.goTo(state.currentPageIndex - 1));
     els.nextPage.addEventListener('click', () => this.goTo(state.currentPageIndex + 1));
     els.fullscreenBtn.addEventListener('click', () => this.toggleFullscreen());
+    if (els.exitFullscreenBtn) els.exitFullscreenBtn.addEventListener('click', () => this.toggleFullscreen());
 
     state.on('document-loaded', () => { this.renderThumbs(); this.renderPageIndicator(); this._toggleNavVisibility(); });
     state.on('layers-changed', () => this.renderThumbBadges());
@@ -87,10 +88,11 @@
     });
   };
 
-  PageNavigator.prototype.toggleFullscreen = function () {
+  PageNavigator.prototype.toggleFullscreen = function (force) {
     const appEl = document.getElementById('app');
-    this._fullscreen = !this._fullscreen;
+    this._fullscreen = typeof force === 'boolean' ? force : !this._fullscreen;
     appEl.classList.toggle('fullscreen-mode', this._fullscreen);
+    if (this.els.exitFullscreenBtn) this.els.exitFullscreenBtn.style.display = this._fullscreen ? 'flex' : 'none';
     try {
       if (this._fullscreen && document.documentElement.requestFullscreen) {
         document.documentElement.requestFullscreen().catch(() => {});
@@ -100,6 +102,21 @@
     } catch (e) { /* fullscreen API unavailable/blocked - CSS immersive mode still applies */ }
     setTimeout(() => this.canvasEditor.applyFit(), 60);
   };
+  PageNavigator.prototype.isFullscreen = function () { return this._fullscreen; };
+
+  // Keep the immersive CSS mode in sync if the user exits the real browser
+  // Fullscreen API directly (Esc key, browser's own "exit fullscreen" UI)
+  // without going through our own toggle button.
+  document.addEventListener('fullscreenchange', function () {
+    if (!document.fullscreenElement) {
+      const appEl = document.getElementById('app');
+      if (appEl && appEl.classList.contains('fullscreen-mode')) {
+        appEl.classList.remove('fullscreen-mode');
+        const exitBtn = document.getElementById('btn-exit-fullscreen');
+        if (exitBtn) exitBtn.style.display = 'none';
+      }
+    }
+  });
 
   WM.PageNavigator = PageNavigator;
 })(window);

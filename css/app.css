@@ -295,6 +295,21 @@ svg { display: block; }
 #app.fullscreen-mode .page-thumb-strip { display: none !important; }
 #app.fullscreen-mode #center-preview { flex: 1; }
 
+/* Floating "exit fullscreen" button - the only way back once fullscreen mode
+   hides #topbar (which normally holds the fullscreen toggle), so this must
+   live inside #center-preview (never hidden) and only reveal itself while
+   fullscreen-mode is active. */
+.btn-exit-fullscreen {
+  position: fixed; top: 14px; right: 14px; z-index: 50;
+  display: none; align-items: center; gap: 6px;
+  padding: 8px 14px; border: none; border-radius: 8px;
+  background: rgba(17, 20, 24, 0.78); color: #fff;
+  font-size: 13px; cursor: pointer; box-shadow: var(--shadow-md);
+  backdrop-filter: blur(2px);
+}
+.btn-exit-fullscreen:hover { background: rgba(17, 20, 24, 0.92); }
+#app.fullscreen-mode .btn-exit-fullscreen { display: flex; }
+
 /* ---------------- Mobile toggles (hidden on desktop) ---------------- */
 .mobile-panel-toggle { display: none; }
 

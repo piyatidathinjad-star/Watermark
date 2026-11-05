@@ -297,7 +297,24 @@
   const ExportEngine = {
     async exportPdf(state, onProgress) {
       const originalBytes = state.document.originalPdfBytes;
-      const pdfDoc = await PDFDocument.load(originalBytes, { updateMetadata: false });
+      let pdfDoc;
+      try {
+        pdfDoc = await PDFDocument.load(originalBytes, { updateMetadata: false });
+      } catch (err) {
+        // pdf-lib cannot actually decrypt protected PDFs - `ignoreEncryption: true`
+        // only suppresses the throw, it does NOT decrypt the original content
+        // streams, so re-saving that way produces a corrupted file. This is common
+        // with Thai government/official documents that set an owner password to
+        // restrict printing/editing while leaving the user password empty (so
+        // every normal PDF viewer opens them with no prompt). pdf.js, already used
+        // for on-screen preview/thumbnails, DOES handle that transparently, so for
+        // this case we rebuild a brand-new (unencrypted) PDF from high-resolution
+        // rasters of each original page and watermark that instead.
+        if (/encrypted/i.test((err && err.message) || '')) {
+          return await ExportEngine._exportEncryptedPdfViaRaster(state, onProgress);
+        }
+        throw err;
+      }
       pdfDoc.registerFontkit(fontkit);
       const pages = pdfDoc.getPages();
       for (let i = 0; i < pages.length; i++) {
@@ -308,6 +325,34 @@
       }
       const bytes = await pdfDoc.save();
       return bytes;
+    },
+
+    // Fallback export path for password/permission-protected PDFs that pdf-lib
+    // cannot re-save faithfully (see comment above). Renders each original page
+    // at a high fixed DPI via pdf.js (which already decrypts transparently - the
+    // same renderer used for the on-screen preview and thumbnails), then builds
+    // a fresh PDF from those page images and watermarks it exactly like the
+    // images-origin export path (exportImagesAsPdf) does.
+    async _exportEncryptedPdfViaRaster(state, onProgress) {
+      const RASTER_DPI = 200;
+      const srcPdf = state.document.pdfDoc;
+      const pageModels = state.document.pages;
+      const pdfDoc = await PDFDocument.create();
+      pdfDoc.registerFontkit(fontkit);
+      for (let i = 0; i < pageModels.length; i++) {
+        const pm = pageModels[i];
+        const pjsPage = await srcPdf.getPage(pm.pageNumber1based);
+        const scale = RASTER_DPI / 72;
+        const canvas = await WM.PdfEngine.renderPageAtScale(pjsPage, scale, pm.rotation);
+        const imgBytes = await canvasToBytes(canvas, 'png');
+        const embedded = await pdfDoc.embedPng(imgBytes);
+        const page = pdfDoc.addPage([pm.widthPt, pm.heightPt]);
+        page.drawImage(embedded, { x: 0, y: 0, width: pm.widthPt, height: pm.heightPt });
+        await applyLayersToPdfPage(pdfDoc, page, state, i);
+        if (onProgress) onProgress(i + 1, pageModels.length);
+        if (i % 2 === 0) await new Promise(r => setTimeout(r, 0));
+      }
+      return pdfDoc.save();
     },
 
     async exportImagesAsPdf(state, onProgress) {
@@ -373,8 +418,12 @@
     canvas.width = imgEl.naturalWidth;
     canvas.height = imgEl.naturalHeight;
     canvas.getContext('2d').drawImage(imgEl, 0, 0);
+    return canvasToBytes(canvas, kind);
+  }
+
+  async function canvasToBytes(canvas, kind, quality) {
     const mime = kind === 'png' ? 'image/png' : 'image/jpeg';
-    const blob = await new Promise(res => canvas.toBlob(res, mime, 0.95));
+    const blob = await new Promise(res => canvas.toBlob(res, mime, quality != null ? quality : 0.95));
     return new Uint8Array(await blob.arrayBuffer());
   }
 
